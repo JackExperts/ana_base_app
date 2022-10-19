@@ -62,7 +62,7 @@ jobs:
         region: ${{ secrets.AWS_S3_REGION }}
         bucket: ${{ secrets.AWS_S3_BUCKET }}
         source: './build/web/'
-        target: ''
+        target: './'
 
   update-helm:
     name: Update Helm Chart
