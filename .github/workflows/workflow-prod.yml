@@ -1,0 +1,114 @@
+name: 'AWS Deploy S3 - PROD'
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+
+jobs:
+  build:
+    name: Build Flutter
+    runs-on: ubuntu-latest
+    steps:
+    # - uses: shimataro/ssh-key-action@v2
+    #   with:
+    #     key: ${{ secrets.SSH_PRIVATE_KEY }}
+    #     name: id_rsa
+    #     known_hosts: ${{ secrets.KNOWN_HOSTS }}
+
+    - name: Install SSH key
+      run: |
+        mkdir ~/.ssh/
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        touch ~/.ssh/known_hosts
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        
+    - uses: actions/checkout@v3
+    - uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+    # - run: flutter pub get
+    # - run: flutter test
+    - run: flutter build web -t lib/main_prod.dart
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: flutter_static
+        path: |
+          ./build/web/
+
+  sync-s3:
+    name: Sync S3
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Linux amd64
+      uses: actions/download-artifact@v2
+      with:
+        name: flutter_static
+        path: ./build/web/
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_S3_REGION }}
+    - name: Deploy static files to AWS S3
+      id: aws-deploy-s3
+      uses: oneyedev/aws-deploy-s3@main
+      with:
+        region: ${{ secrets.AWS_S3_REGION }}
+        bucket: ${{ secrets.AWS_S3_BUCKET }}
+        source: './build/web/'
+        target: ''
+
+  update-helm:
+    name: Update Helm Chart
+    runs-on: ubuntu-latest
+    needs: sync-s3
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+    steps:     
+    - uses: actions/checkout@v3
+
+    # Build and test application
+    - name: Get Time
+      id: time
+      uses: nanzm/get-time-action@v1.1
+      with:
+        timeZone: '-3'
+        format: 'YYMM'
+
+    # Install yq
+    - name: Install yq 
+      run: |
+        wget https://github.com/mikefarah/yq/releases/download/v4.12.0/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
+        yq --version
+        
+    - name: Install SSH key
+      run: |
+        mkdir ~/.ssh/
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        touch ~/.ssh/known_hosts
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+    
+    - name: Update version in Helm git repo 
+      env:
+        TIME: "${{ steps.time.outputs.time }}"
+      run: | 
+        echo Create temporary folder to clone the repo into...
+        TEMP_FOLDER="$(mktemp -d)" 
+        echo Clone the repository...
+        git clone -b main "git@github.com:NasajonSRE/helm.git" ${TEMP_FOLDER}
+        cd ${TEMP_FOLDER}/charts/admissao
+        VERSION=$GITHUB_REF_NAME.$TIME.$GITHUB_RUN_NUMBER yq e -i ".version = env(VERSION)" Chart.yaml
+        echo "App Version updated in charts/admissao/Chart.yaml" 
+        cd ${TEMP_FOLDER}/
+        git config user.email "deployuser@nasajon.com.br" 
+        git config user.name "Github Deploy User" 
+        git add .  
+        git commit -m "Updated Helm chart AppVersion for ANACOMVC"
+        git push -u origin main
