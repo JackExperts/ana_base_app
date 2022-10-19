@@ -40,10 +40,10 @@ dependencies:
       url: git@github.com:Nasajon/flutter_dependencies.git
       ref: master # branch name
 
-  meutrabalhoapp:
-    git:
-      url: git@github.com:Nasajon/meutrabalho_mobile.git
-      ref: master # branch name
+  # meutrabalhoapp:
+  #   git:
+  #     url: git@github.com:Nasajon/meutrabalho_mobile.git
+  #     ref: master # branch name
 
   # flutter_core:
   #   path: "../flutter_core"
