@@ -104,7 +104,7 @@ jobs:
         echo Clone the repository...
         git clone -b main "git@github.com:NasajonSRE/helm.git" ${TEMP_FOLDER}
         cd ${TEMP_FOLDER}/charts/admissao
-        VERSION=$GITHUB_REF_NAME.$TIME.$GITHUB_RUN_NUMBER yq e -i ".version = env(VERSION)" Chart.yaml
+        VERSION=$GITHUB_REF_NAME.$TIME.$GITHUB_RUN_NUMBER yq e -i ".appVersion = env(VERSION)" Chart.yaml
         echo "App Version updated in charts/admissao/Chart.yaml" 
         cd ${TEMP_FOLDER}/
         git config user.email "deployuser@nasajon.com.br" 
